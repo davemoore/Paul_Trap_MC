@@ -321,3 +321,85 @@ def mathieu(y, t, b, a, q):
     dwdx = -b*w + (a - 2*q * np.cos(2*t))*u
 
     return [dudx, dwdx]
+
+def Esphere(x,y,z,q_sphere,sphere_rad):
+    ## field from sphere (if desired)
+    r = np.sqrt(x**2 + y**2 + z**2)
+    Esphere = k * q_sphere/r**2
+    Esphere[r<=sphere_rad] = 0 ## no field inside
+    Es_x, Es_y, Es_z = Esphere*x/r, Esphere*y/r, Esphere*z/r 
+
+    return Es_x, Es_y, Es_z
+
+
+def EsphereSing(x,y,z,q_sphere,sphere_rad):
+    ## field from sphere (if desired)
+    r = np.sqrt(x**2 + y**2 + z**2)
+    Es = k * q_sphere/r**2
+    if(r <= sphere_rad):
+        return 0, 0, 0
+    else:
+        return Es*x/r, Es*y/r, Es*z/r 
+
+def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.1, q_sphere=-100, sphere_rad = 5e-3, needle_face=500e-4):
+    ''' Track a particle through the 2D E-field supplied in Ex, Ey
+        x0 -- initial position (x,y,z) in cm
+        mu -- mobility in cm^2/(s*V)
+        xstep -- time step in seconds
+        Ex, Ey -- callable functions returning Ex, Ey interpolation
+        Vt -- callable function that gives voltage as a function of time
+        max_t -- maximum time
+        
+        returns trajectory [x,y,z,t]
+    '''
+    MAX_STEPS = 100000
+    high_res_rad = 1e-2 ## cm, when in the radius step by at most 0.5 um
+    MAX_STEP_SIZE = 0.5e-4 ## cm, step by at most 0.5 um
+
+    curr_t = 0
+
+    trajectory = []
+    trajectory.append([x0[0], x0[1], x0[2], curr_t]) # put initial position in trajectory
+    
+    phi = np.arctan2(x0[2],x0[1])
+
+    for j in range(MAX_STEPS):
+
+        if(j%10000 == 0): print("Curr iter %d, curr time %f"%(j, curr_t))
+
+        curr_pos = np.array(trajectory[-1][0:3]) ## last position
+        s = np.sqrt(curr_pos[1]**2 + curr_pos[2]**2) ## cylind radius
+
+        curr_V = Vt(curr_t)
+
+        ex, ey = curr_V*Ex(curr_pos[0], s), curr_V*Ey(curr_pos[0], s)
+        exs, eys, _ = EsphereSing(curr_pos[0], s, 0, q_sphere=q_sphere, sphere_rad=1.5e-4)
+
+        ex += exs
+        ey += eys
+
+        if(np.sqrt(np.sum(curr_pos**2)) > high_res_rad):
+            ctm = tstep*mu
+            dx, dy, dz = ctm*ex[0], ctm*ey[0]*np.cos(phi), ctm*ey[0]*np.sin(phi)
+            curr_t += tstep
+        else:
+            ## if close to the sphere take an adaptive step that moves by a max size
+            enorm = np.sqrt(ex[0]**2 + ey[0]**2)/MAX_STEP_SIZE
+            dx, dy, dz = ex[0]/enorm, ey[0]*np.cos(phi)/enorm, ey[0]*np.sin(phi)/enorm
+            variable_step = 1/(enorm * mu)
+            curr_t += variable_step
+    
+        updated_pos = [curr_pos[0]+dx, curr_pos[1]+dy, curr_pos[2]+dz]
+        trajectory.append([updated_pos[0], updated_pos[1], updated_pos[2], curr_t])
+
+        curr_t += tstep
+
+        ## break if we are in the sphere
+        in_sphere = np.sqrt(np.sum(np.array(updated_pos)**2)) <= sphere_rad
+        in_needle = (updated_pos[0] >= needle_face) and (np.sqrt(updated_pos[1]**2 + updated_pos[2]**2) < 125e-4)
+        if(in_sphere): print("In sphere!")
+        if(in_needle): print("In needle!")
+        if( in_sphere or in_needle or curr_t>max_t):
+            break
+
+    return np.array(trajectory)

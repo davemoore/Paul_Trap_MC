@@ -300,18 +300,18 @@ def plot3Dtraj(traj, sphere_rad = 1.5e-4, title="", nmax = -1, zoom_range=5e-3):
     ## now make 2d plots
     coord_list = ["X", "Y", "Z"]
     for i in range(3):
-        ax2d[i].plot(traj[:,-1], traj[:,i], 'k', lw=0.5)
+        ax2d[i].plot(traj[:,-1], traj[:,i], 'k.-', lw=0.5)
         ax2d[i].set_xlabel("Time [s]")
         ax2d[i].set_ylabel(coord_list[i] + " [cm]")
 
-        if(traj[0,i] > 0):
-            ax2d_ins = ax2d[i].inset_axes((0.5, 0.5, 0.4, 0.4))
-        else:
-            ax2d_ins = ax2d[i].inset_axes((0.5, 0.2, 0.4, 0.4))
-        ax2d_ins.plot(traj[nsamples:,-1]*1e3, traj[nsamples:,i]*1e4, 'k', lw=0.5)
-        #ax2d_ins.plot(traj[nsamples:,-1]*1e3, np.ones_like(traj[nsamples:,-1])*sphere_rad*1e4, ':', color='gray')
-        ax2d_ins.set_xlabel("Time [ms]")
-        ax2d_ins.set_ylabel(coord_list[i] + " [um]")
+        #if(traj[0,i] > 0):
+        #    ax2d_ins = ax2d[i].inset_axes((0.1, 0.1, 0.4, 0.4))
+        #else:
+        #    ax2d_ins = ax2d[i].inset_axes((0.1, 0.5, 0.4, 0.4))
+        #ax2d_ins.plot(traj[nsamples:,-1]*1e3, traj[nsamples:,i]*1e4, 'k', lw=0.5)
+        ##ax2d_ins.plot(traj[nsamples:,-1]*1e3, np.ones_like(traj[nsamples:,-1])*sphere_rad*1e4, ':', color='gray')
+        #ax2d_ins.set_xlabel("Time [ms]")
+        #ax2d_ins.set_ylabel(coord_list[i] + " [um]")
 
 
 def mathieu(y, t, b, a, q):
@@ -341,7 +341,7 @@ def EsphereSing(x,y,z,q_sphere,sphere_rad):
     else:
         return Es*x/r, Es*y/r, Es*z/r 
 
-def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.1, q_sphere=-100, sphere_rad = 5e-3, needle_face=500e-4):
+def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.2, q_sphere=-100, sphere_rad = 1.5e-4, needle_face=500e-4):
     ''' Track a particle through the 2D E-field supplied in Ex, Ey
         x0 -- initial position (x,y,z) in cm
         mu -- mobility in cm^2/(s*V)
@@ -352,9 +352,9 @@ def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.1, q_sphere=-1
         
         returns trajectory [x,y,z,t]
     '''
-    MAX_STEPS = 100000
+    MAX_STEPS = max_t/tstep * 10
     high_res_rad = 1e-2 ## cm, when in the radius step by at most 0.5 um
-    MAX_STEP_SIZE = 0.5e-4 ## cm, step by at most 0.5 um
+    MAX_STEP_SIZE = 0.1e-4 ## cm, step by at most 0.5 um
 
     curr_t = 0
 
@@ -365,7 +365,7 @@ def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.1, q_sphere=-1
 
     for j in range(MAX_STEPS):
 
-        if(j%10000 == 0): print("Curr iter %d, curr time %f"%(j, curr_t))
+       #if(j%10000 == 0): print("Curr iter %d, curr time %f"%(j, curr_t))
 
         curr_pos = np.array(trajectory[-1][0:3]) ## last position
         s = np.sqrt(curr_pos[1]**2 + curr_pos[2]**2) ## cylind radius
@@ -392,14 +392,72 @@ def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.1, q_sphere=-1
         updated_pos = [curr_pos[0]+dx, curr_pos[1]+dy, curr_pos[2]+dz]
         trajectory.append([updated_pos[0], updated_pos[1], updated_pos[2], curr_t])
 
-        curr_t += tstep
-
         ## break if we are in the sphere
         in_sphere = np.sqrt(np.sum(np.array(updated_pos)**2)) <= sphere_rad
-        in_needle = (updated_pos[0] >= needle_face) and (np.sqrt(updated_pos[1]**2 + updated_pos[2]**2) < 125e-4)
-        if(in_sphere): print("In sphere!")
-        if(in_needle): print("In needle!")
+        in_needle = (updated_pos[0] >= needle_face) and (np.sqrt(updated_pos[1]**2 + updated_pos[2]**2) < 125e-3)
+        #if(in_sphere): print("In sphere!")
+        #if(in_needle): print("In needle!")
         if( in_sphere or in_needle or curr_t>max_t):
             break
 
-    return np.array(trajectory)
+        #print(curr_pos, curr_t, curr_V)
+
+    return np.array(trajectory), [in_sphere, in_needle]
+
+
+def Vneedle_increasing(t, Vlist, ton, toff, tstep=1e-6):
+    Vout = []
+    for V in Vlist:
+        Vout += int(toff/tstep)*[0]
+        if(np.abs(V) < 100):
+            div_fac = 1
+        elif np.abs(V) < 1000:   
+            div_fac = 10
+        else:
+            div_fac = 100
+        Vout += int(ton*div_fac/tstep)*[V/div_fac]
+
+    return np.array(Vout)
+
+def get_random_decay_time(t12):
+    ## return a random decay time for some half life t12
+    
+    decay_constant = np.log(2)/t12
+    decay_time = -np.log(np.random.rand()) / decay_constant
+
+    return decay_time
+
+def do_full_sim(Ex, Ey, V, needle_face, tstep=1e-6, q_sphere=-100, pressure=10, side_length=4, sphere_rad=1.5e-4):
+    """ run the full simulation for a single particle
+        Ex, Ey -- function giving efield in V/cm for unit voltage
+        V - function giving voltage at given time t in seconds
+        pressure -- gas pressure in mbar
+        side_length -- wall separation in cm
+    """
+
+    rn_pos_x = (np.random.rand()-0.5)*side_length
+    rn_pos_y = (np.random.rand()-0.5)*side_length
+    rn_pos_z = (np.random.rand()-0.5)*side_length
+
+    ## ranges and straggle from SRIM
+    ion_range = (0.81 + np.random.randn()*0.11) * 10/pressure
+
+    phi = 2*np.pi*np.random.rand()
+    theta = np.arccos(2*np.random.rand()-1)
+
+    ion_dx = ion_range*np.sin(theta)*np.cos(phi)
+    ion_dy = ion_range*np.sin(theta)*np.sin(phi)
+    ion_dz = ion_range*np.cos(theta)
+
+    po_216_x0 = [rn_pos_x+ion_dx, rn_pos_y+ion_dy, rn_pos_z+ion_dz] ## intial pos of the polonium
+
+    if( np.abs(po_216_x0[0]) > side_length/2 or np.abs(po_216_x0[1]) > side_length/2 or np.abs(po_216_x0[2]) > side_length/2 ):
+        return [po_216_x0], [False, False, True] # traj, [hit sphere, hit needle, hit wall]
+    
+    decay_time = get_random_decay_time(0.145) ## half life for Po-216
+
+    mu=100*(10/pressure) ## mobility in cm^2/Vs
+
+    traj, end_cond = track_particle_to_needle(po_216_x0, mu, Ex, Ey, tstep, V, max_t=decay_time, q_sphere=q_sphere, sphere_rad=sphere_rad, needle_face=needle_face)
+
+    return traj, [end_cond[0], end_cond[1], False]

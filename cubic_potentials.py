@@ -352,7 +352,7 @@ def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.2, q_sphere=-1
         
         returns trajectory [x,y,z,t]
     '''
-    MAX_STEPS = max_t/tstep * 10
+    MAX_STEPS = int(max_t/tstep * 10)
     high_res_rad = 1e-2 ## cm, when in the radius step by at most 0.5 um
     MAX_STEP_SIZE = 0.1e-4 ## cm, step by at most 0.5 um
 
@@ -405,7 +405,7 @@ def track_particle_to_needle(x0, mu, Ex, Ey, tstep, Vt, max_t = 0.2, q_sphere=-1
     return np.array(trajectory), [in_sphere, in_needle]
 
 
-def Vneedle_increasing(t, Vlist, ton, toff, tstep=1e-6):
+def Vneedle_increasing(Vlist, ton, toff, tstep=1e-6):
     Vout = []
     for V in Vlist:
         Vout += int(toff/tstep)*[0]
@@ -416,6 +416,8 @@ def Vneedle_increasing(t, Vlist, ton, toff, tstep=1e-6):
         else:
             div_fac = 100
         Vout += int(ton*div_fac/tstep)*[V/div_fac]
+
+    Vout = Vout*20 ## go out at least 20 T12
 
     return np.array(Vout)
 
@@ -452,7 +454,7 @@ def do_full_sim(Ex, Ey, V, needle_face, tstep=1e-6, q_sphere=-100, pressure=10, 
     po_216_x0 = [rn_pos_x+ion_dx, rn_pos_y+ion_dy, rn_pos_z+ion_dz] ## intial pos of the polonium
 
     if( np.abs(po_216_x0[0]) > side_length/2 or np.abs(po_216_x0[1]) > side_length/2 or np.abs(po_216_x0[2]) > side_length/2 ):
-        return [po_216_x0], [False, False, True] # traj, [hit sphere, hit needle, hit wall]
+        return np.array([[po_216_x0[0], po_216_x0[1], po_216_x0[2]]]), [False, False, True] # traj, [hit sphere, hit needle, hit wall]
     
     decay_time = get_random_decay_time(0.145) ## half life for Po-216
 

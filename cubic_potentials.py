@@ -314,13 +314,20 @@ def plot3Dtraj(traj, sphere_rad = 1.5e-4, title="", nmax = -1, zoom_range=5e-3):
         #ax2d_ins.set_ylabel(coord_list[i] + " [um]")
 
 
-def mathieu(y, t, b, a, q):
-    u, w = y
+def mathieu(y, t, b, a, q, k, sphere_rad = 1.5e-4):
+    ux, wx, uz, wz = y
 
-    dudx = w
-    dwdx = -b*w + (a - 2*q * np.cos(2*t))*u
+    az = -0.5*a
+    qz = -0.5*q
 
-    return [dudx, dwdx]
+    out_sphere = float( np.sqrt(ux**2 + uz**2) > sphere_rad )
+
+    dudx = wx
+    dwdx = -b*wx + (a - 2*q * np.cos(2*t))*ux + out_sphere*k*ux/(ux**2 + uz**2)**1.5
+    dudz = wz
+    dwdz = -b*wz + (az - 2*qz * np.cos(2*t))*uz + out_sphere*k*uz/(ux**2 + uz**2)**1.5
+
+    return [dudx, dwdx, dudz, dwdz]
 
 def Esphere(x,y,z,q_sphere,sphere_rad):
     ## field from sphere (if desired)
